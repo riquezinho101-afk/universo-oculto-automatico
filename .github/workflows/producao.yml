@@ -10,6 +10,7 @@ permissions:
 jobs:
   criar-roteiro:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Preparar ambiente
@@ -21,29 +22,51 @@ jobs:
         run: |
           set -e
 
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "ERRO: Chave Gemini nao encontrada."
-            exit 1
-          fi
-
-          PROMPT='Crie um roteiro original para o canal Universo Oculto sobre 7 curiosidades surpreendentes e verdadeiras sobre o planeta Terra. Escreva em portugues brasileiro, com abertura impactante, narracao envolvente, explicacoes educativas e uma pergunta curiosa a cada parte. Nao invente fatos. Organize em introducao, sete partes e encerramento.'
+          PROMPT='Crie um roteiro original para o canal Universo Oculto sobre 7 curiosidades surpreendentes e verdadeiras sobre o planeta Terra. Escreva em português brasileiro, com abertura impactante, sete partes educativas e encerramento. Não invente fatos.'
 
           REQUEST=$(jq -n \
             --arg prompt "$PROMPT" \
-            '{model:"gemini-3.8-flash",input:$prompt}')
+            '{contents:[{parts:[{text:$prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:4000}}')
 
-          RESPONSE=$(curl --fail-with-body -sS \
-            -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/interactions" \
-            -H "x-goog-api-key: $GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$REQUEST")
+          URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
-          ROTEIRO=$(echo "$RESPONSE" | jq -r \
-            '.output_text // ([.steps[]? | select(.type=="model_output") | .content[]? | select(.type=="text") | .text] | join("\n"))')
+          for attempt in 1 2 3 4 5; do
+            echo "Tentativa $attempt de 5"
 
-          if [ -z "$ROTEIRO" ]; then
-            echo "ERRO: O Gemini nao retornou um roteiro."
+            CODE=$(curl -sS \
+              --connect-timeout 20 \
+              --max-time 180 \
+              -o resposta.json \
+              -w "%{http_code}" \
+              -X POST "$URL" \
+              -H "x-goog-api-key: $GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$REQUEST") || CODE=000
+
+            if [ "$CODE" = "200" ]; then
+              break
+            fi
+
+            echo "Resposta HTTP: $CODE"
+
+            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+              cat resposta.json
+              exit 1
+            fi
+
+            if [ "$attempt" = "5" ]; then
+              cat resposta.json
+              exit 1
+            fi
+
+            sleep $((attempt * 15))
+          done
+
+          ROTEIRO=$(jq -r '.candidates[0].content.parts | map(select(.text != null) | .text) | join("\n")' resposta.json)
+
+          if [ -z "$ROTEIRO" ] || [ "$ROTEIRO" = "null" ]; then
+            echo "Gemini nao retornou texto."
+            cat resposta.json
             exit 1
           fi
 
