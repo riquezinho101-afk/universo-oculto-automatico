@@ -1,0 +1,20 @@
+
+name: Universo Oculto - Automacao
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preparar ambiente
+        run: |
+          echo "Universo Oculto - sistema iniciado"
+          echo "Data: $(date -u)"
+          echo "Ambiente de producao preparado"        
