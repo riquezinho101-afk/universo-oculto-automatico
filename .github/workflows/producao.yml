@@ -8,9 +8,9 @@ permissions:
   contents: read
 
 jobs:
-  criar-roteiro-e-narracao:
+  criar-roteiro-e-video:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Preparar ambiente
@@ -21,22 +21,17 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
-
           PROMPT='Crie um roteiro original para o canal Universo Oculto sobre 7 curiosidades surpreendentes e verdadeiras sobre o planeta Terra. Escreva em português brasileiro, com abertura impactante, sete partes educativas e encerramento. Não invente fatos.'
 
-          REQUEST=$(jq -n \
-            --arg prompt "$PROMPT" \
+          REQUEST=$(jq -n --arg prompt "$PROMPT" \
             '{contents:[{parts:[{text:$prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:4000}}')
 
           URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+
           for attempt in 1 2 3 4 5; do
             echo "Tentativa $attempt de 5"
-
-            CODE=$(curl -sS \
-              --connect-timeout 20 \
-              --max-time 180 \
-              -o resposta.json \
-              -w "%{http_code}" \
+            CODE=$(curl -sS --connect-timeout 20 --max-time 180 \
+              -o resposta.json -w "%{http_code}" \
               -X POST "$URL" \
               -H "x-goog-api-key: $GEMINI_API_KEY" \
               -H "Content-Type: application/json" \
@@ -47,49 +42,35 @@ jobs:
             fi
 
             echo "Resposta HTTP: $CODE"
-
-            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "404" ]; then
+            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "404" ] || [ "$attempt" = "5" ]; then
               cat resposta.json
               exit 1
             fi
-
-            if [ "$attempt" = "5" ]; then
-              cat resposta.json
-              exit 1
-            fi
-
             sleep $((attempt * 15))
           done
 
           ROTEIRO=$(jq -r '.candidates[0].content.parts | map(select(.text != null) | .text) | join("\n")' resposta.json)
-
-          if [ -z "$ROTEIRO" ] || [ "$ROTEIRO" = "null" ]; then
-            echo "Gemini nao retornou texto."
-            cat resposta.json
-            exit 1
-          fi
-
+          test -n "$ROTEIRO"
           printf '%s\n' "$ROTEIRO" > roteiro.md
           echo "Roteiro criado com sucesso!"
 
       - name: Instalar Piper
         run: |
           python -m pip install --upgrade pip
-          python -m pip install piper-tts
+          python -m pip install piper-tts Pillow requests
+
+      - name: Instalar FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Baixar voz Cadu
         run: |
           mkdir -p voz
-
           BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/cadu/medium"
 
-          curl -L --fail --retry 3 \
-            "$BASE/pt_BR-cadu-medium.onnx" \
-            -o voz/pt_BR-cadu-medium.onnx
-
-          curl -L --fail --retry 3 \
-            "$BASE/pt_BR-cadu-medium.onnx.json" \
-            -o voz/pt_BR-cadu-medium.onnx.json
+          curl -L --fail --retry 3 "$BASE/pt_BR-cadu-medium.onnx" -o voz/pt_BR-cadu-medium.onnx
+          curl -L --fail --retry 3 "$BASE/pt_BR-cadu-medium.onnx.json" -o voz/pt_BR-cadu-medium.onnx.json
 
           echo "Voz Cadu baixada!"
 
@@ -105,33 +86,25 @@ jobs:
 
           for linha in texto.splitlines():
               s = linha.strip()
-
               if not s:
                   continue
-
               if re.match(r'^#{1,6}\s', s):
                   continue
-
               if re.match(r'^\[.*\]$', s):
                   continue
-
               if re.match(r'^\*\*\s*\[', s):
                   continue
-
               if re.match(r'^\*\*(Canal|Duração|Estilo|Tom)\s*:', s, re.I):
                   continue
-
               if re.match(r'^\[(VÍDEO|VIDEO|ÁUDIO|AUDIO|CENA|TRILHA|EFEITO)', s, re.I):
                   continue
 
               linha = re.sub(r'\[(NARRAÇÃO|NARRACAO)\]\s*', '', linha, flags=re.I)
               linha = re.sub(r'\*\*(.*?)\*\*', r'\1', linha)
               linha = re.sub(r'\*(.*?)\*', r'\1', linha)
-
               linhas.append(linha.strip())
 
           narracao = "\n".join(linhas).strip()
-
           if not narracao:
               raise SystemExit("O texto de narracao ficou vazio.")
 
@@ -147,15 +120,21 @@ jobs:
             -m voz/pt_BR-cadu-medium.onnx \
             -f narracao.wav \
             --input-file narracao.txt
-
           test -s narracao.wav
           echo "Narracao criada com sucesso!"
 
-      - name: Salvar roteiro e audio
+      - name: Montar video
+        run: |
+          python montar_video.py
+          test -s universo_oculto.mp4
+          echo "Video criado com sucesso!"
+
+      - name: Salvar arquivos produzidos
         uses: actions/upload-artifact@v4
         with:
-          name: universo-oculto-roteiro-e-narracao
+          name: universo-oculto-video-completo
           path: |
             roteiro.md
             narracao.txt
             narracao.wav
+            universo_oculto.mp4
