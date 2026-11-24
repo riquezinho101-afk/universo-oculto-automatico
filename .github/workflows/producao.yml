@@ -8,9 +8,9 @@ permissions:
   contents: read
 
 jobs:
-  criar-roteiro:
+  criar-roteiro-e-narracao:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Preparar ambiente
@@ -49,7 +49,7 @@ jobs:
 
             echo "Resposta HTTP: $CODE"
 
-            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "404" ]; then
               cat resposta.json
               exit 1
             fi
@@ -73,8 +73,90 @@ jobs:
           printf '%s\n' "$ROTEIRO" > roteiro.md
           echo "Roteiro criado com sucesso!"
 
-      - name: Salvar roteiro
+      - name: Instalar Piper
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install piper-tts
+
+      - name: Baixar voz Cadu
+        run: |
+          mkdir -p voz
+
+          BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/cadu/medium"
+
+          curl -L --fail --retry 3 \
+            "$BASE/pt_BR-cadu-medium.onnx" \
+            -o voz/pt_BR-cadu-medium.onnx
+
+          curl -L --fail --retry 3 \
+            "$BASE/pt_BR-cadu-medium.onnx.json" \
+            -o voz/pt_BR-cadu-medium.onnx.json
+
+          echo "Voz Cadu baixada!"
+
+      - name: Preparar texto para narracao
+        run: |
+          python - <<'PY'
+          import re
+
+          with open("roteiro.md", "r", encoding="utf-8") as f:
+              texto = f.read()
+
+          linhas = []
+
+          for linha in texto.splitlines():
+              s = linha.strip()
+
+              if not s:
+                  continue
+
+              if re.match(r'^#{1,6}\s', s):
+                  continue
+
+              if re.match(r'^\[.*\]$', s):
+                  continue
+
+              if re.match(r'^\*\*\s*\[', s):
+                  continue
+
+              if re.match(r'^\*\*(Canal|Duração|Estilo|Tom)\s*:', s, re.I):
+                  continue
+
+              if re.match(r'^\[(VÍDEO|VIDEO|ÁUDIO|AUDIO|CENA|TRILHA|EFEITO)', s, re.I):
+                  continue
+
+              linha = re.sub(r'\[(NARRAÇÃO|NARRACAO)\]\s*', '', linha, flags=re.I)
+              linha = re.sub(r'\*\*(.*?)\*\*', r'\1', linha)
+              linha = re.sub(r'\*(.*?)\*', r'\1', linha)
+
+              linhas.append(linha.strip())
+
+          narracao = "\n".join(linhas).strip()
+
+          if not narracao:
+              raise SystemExit("O texto de narracao ficou vazio.")
+
+          with open("narracao.txt", "w", encoding="utf-8") as f:
+              f.write(narracao)
+
+          print("Texto preparado para a voz Cadu!")
+          PY
+
+      - name: Gerar narracao com voz Cadu
+        run: |
+          python -m piper \
+            -m voz/pt_BR-cadu-medium.onnx \
+            -f narracao.wav \
+            --input-file narracao.txt
+
+          test -s narracao.wav
+          echo "Narracao criada com sucesso!"
+
+      - name: Salvar roteiro e audio
         uses: actions/upload-artifact@v4
         with:
-          name: roteiro-universo-oculto
-          path: roteiro.md
+          name: universo-oculto-roteiro-e-narracao
+          path: |
+            roteiro.md
+            narracao.txt
+            narracao.wav
