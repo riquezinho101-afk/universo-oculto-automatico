@@ -21,7 +21,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
-          PROMPT='Crie um roteiro original para o canal Universo Oculto sobre 7 curiosidades surpreendentes e verdadeiras sobre o planeta Terra. Escreva em português brasileiro, com abertura impactante, sete partes educativas e encerramento. Não invente fatos.'
+          PROMPT='Crie um roteiro para o canal Universo Oculto sobre 7 curiosidades verdadeiras e surpreendentes sobre o planeta Terra. Escreva em português brasileiro. O formato é OBRIGATÓRIO: use exatamente os títulos [ABERTURA], [PARTE 1: O PLANETA QUE VIBRA], [PARTE 2: UM DIA QUE ESTÁ FICANDO MAIS LONGO], [PARTE 3: O DESERTO QUE NÃO É DE AREIA], [PARTE 4: A TERRA JÁ FOI ROXA], [PARTE 5: A GRAVIDADE NÃO É IGUAL EM TODO LUGAR], [PARTE 6: O NÚCLEO É TÃO QUENTE QUANTO O SOL], [PARTE 7: O OCEANO OCULTO] e [ENCERRAMENTO]. Cada título deve ficar sozinho em uma linha. Depois de cada título, escreva somente a narração, sem instruções visuais, sem parênteses e sem indicações de trilha sonora. Não use títulos em Markdown com #. Não invente fatos. Explique quando algo for hipótese científica e não fato comprovado.'
 
           REQUEST=$(jq -n --arg prompt "$PROMPT" \
             '{contents:[{parts:[{text:$prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:4000}}')
