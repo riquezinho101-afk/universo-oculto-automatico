@@ -1,20 +1,57 @@
 
-name: Universo Oculto - Automacao
+name: Universo Oculto - Producao
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 12 * * *"
 
 permissions:
   contents: read
 
 jobs:
-  verificar:
+  criar-roteiro:
     runs-on: ubuntu-latest
+
     steps:
       - name: Preparar ambiente
+        uses: actions/checkout@v4
+
+      - name: Gerar roteiro com Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          echo "Universo Oculto - sistema iniciado"
-          echo "Data: $(date -u)"
-          echo "Ambiente de producao preparado"        
+          set -e
+
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "ERRO: Chave Gemini nao encontrada."
+            exit 1
+          fi
+
+          PROMPT='Crie um roteiro original para o canal Universo Oculto sobre 7 curiosidades surpreendentes e verdadeiras sobre o planeta Terra. Escreva em portugues brasileiro, com abertura impactante, narracao envolvente, explicacoes educativas e uma pergunta curiosa a cada parte. Nao invente fatos. Organize em introducao, sete partes e encerramento.'
+
+          REQUEST=$(jq -n \
+            --arg prompt "$PROMPT" \
+            '{model:"gemini-3.8-flash",input:$prompt}')
+
+          RESPONSE=$(curl --fail-with-body -sS \
+            -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/interactions" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$REQUEST")
+
+          ROTEIRO=$(echo "$RESPONSE" | jq -r \
+            '.output_text // ([.steps[]? | select(.type=="model_output") | .content[]? | select(.type=="text") | .text] | join("\n"))')
+
+          if [ -z "$ROTEIRO" ]; then
+            echo "ERRO: O Gemini nao retornou um roteiro."
+            exit 1
+          fi
+
+          printf '%s\n' "$ROTEIRO" > roteiro.md
+          echo "Roteiro criado com sucesso!"
+
+      - name: Salvar roteiro
+        uses: actions/upload-artifact@v4
+        with:
+          name: roteiro-universo-oculto
+          path: roteiro.md
