@@ -1,4 +1,3 @@
-
 name: Universo Oculto - Producao
 
 on:
@@ -16,42 +15,77 @@ jobs:
       - name: Preparar ambiente
         uses: actions/checkout@v4
 
-      - name: Gerar roteiro com Gemini
+      - name: Gerar roteiro com Gemini e modelo reserva
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "ERRO: o segredo GEMINI_API_KEY não está configurado."
+            exit 1
+          fi
+
           PROMPT='Crie um roteiro para o canal Universo Oculto sobre 7 curiosidades verdadeiras e surpreendentes sobre o planeta Terra. Escreva em português brasileiro. O formato é OBRIGATÓRIO: use exatamente os títulos [ABERTURA], [PARTE 1: O PLANETA QUE VIBRA], [PARTE 2: UM DIA QUE ESTÁ FICANDO MAIS LONGO], [PARTE 3: O DESERTO QUE NÃO É DE AREIA], [PARTE 4: A TERRA JÁ FOI ROXA], [PARTE 5: A GRAVIDADE NÃO É IGUAL EM TODO LUGAR], [PARTE 6: O NÚCLEO É TÃO QUENTE QUANTO O SOL], [PARTE 7: O OCEANO OCULTO] e [ENCERRAMENTO]. Cada título deve ficar sozinho em uma linha. Depois de cada título, escreva somente a narração, sem instruções visuais, sem parênteses e sem indicações de trilha sonora. Não use títulos em Markdown com #. Não invente fatos. Explique quando algo for hipótese científica e não fato comprovado.'
 
           REQUEST=$(jq -n --arg prompt "$PROMPT" \
             '{contents:[{parts:[{text:$prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:4000}}')
 
-          URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+          MODELS=("gemini-3.1-flash-lite" "gemini-3.5-flash-lite")
+          ROTEIRO=""
 
-          for attempt in 1 2 3 4 5; do
-            echo "Tentativa $attempt de 5"
-            CODE=$(curl -sS --connect-timeout 20 --max-time 180 \
-              -o resposta.json -w "%{http_code}" \
-              -X POST "$URL" \
-              -H "x-goog-api-key: $GEMINI_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "$REQUEST") || CODE=000
+          for MODEL in "${MODELS[@]}"; do
+            echo "Usando modelo: ${MODEL}"
+            URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 
-            if [ "$CODE" = "200" ]; then
-              break
-            fi
+            for attempt in 1 2 3 4 5; do
+              echo "Tentativa ${attempt}/5 com ${MODEL}"
 
-            echo "Resposta HTTP: $CODE"
-            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "404" ] || [ "$attempt" = "5" ]; then
-              cat resposta.json
-              exit 1
-            fi
-            sleep $((attempt * 15))
+              CODE=$(curl -sS --connect-timeout 20 --max-time 180 \
+                -o resposta.json -w "%{http_code}" \
+                -X POST "$URL" \
+                -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+                -H "Content-Type: application/json" \
+                -d "$REQUEST") || CODE="000"
+
+              if [ "$CODE" = "200" ]; then
+                ROTEIRO=$(jq -r '[.candidates[]?.content.parts[]?.text // empty] | join("\n")' resposta.json)
+
+                if [ -n "$ROTEIRO" ] && [ "$ROTEIRO" != "null" ]; then
+                  echo "Roteiro recebido do modelo ${MODEL}."
+                  break 2
+                fi
+
+                echo "A API respondeu, mas não retornou texto utilizável."
+                cat resposta.json || true
+              else
+                echo "Resposta HTTP: ${CODE}"
+                cat resposta.json || true
+
+                if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "404" ]; then
+                  echo "Erro de requisição, chave ou modelo. Não adianta repetir."
+                  exit 1
+                fi
+              fi
+
+              if [ "$attempt" -lt 5 ]; then
+                WAIT=$((attempt * 15))
+                echo "Aguardando ${WAIT} segundos antes de tentar novamente."
+                sleep "$WAIT"
+              fi
+            done
+
+            echo "O modelo ${MODEL} não funcionou."
           done
 
-          ROTEIRO=$(jq -r '.candidates[0].content.parts | map(select(.text != null) | .text) | join("\n")' resposta.json)
-          test -n "$ROTEIRO"
+          if [ -z "$ROTEIRO" ]; then
+            echo "ERRO: os dois modelos falharam. Nenhum roteiro foi criado."
+            exit 1
+          fi
+
           printf '%s\n' "$ROTEIRO" > roteiro.md
+          test -s roteiro.md
           echo "Roteiro criado com sucesso!"
 
       - name: Instalar Piper
@@ -72,6 +106,8 @@ jobs:
           curl -L --fail --retry 3 "$BASE/pt_BR-cadu-medium.onnx" -o voz/pt_BR-cadu-medium.onnx
           curl -L --fail --retry 3 "$BASE/pt_BR-cadu-medium.onnx.json" -o voz/pt_BR-cadu-medium.onnx.json
 
+          test -s voz/pt_BR-cadu-medium.onnx
+          test -s voz/pt_BR-cadu-medium.onnx.json
           echo "Voz Cadu baixada!"
 
       - name: Preparar texto para narracao
@@ -120,14 +156,16 @@ jobs:
             -m voz/pt_BR-cadu-medium.onnx \
             -f narracao.wav \
             --input-file narracao.txt
+
           test -s narracao.wav
           echo "Narracao criada com sucesso!"
 
-      - name: Montar video
+      - name: Montar video principal
         run: |
           python montar_video.py
           test -s universo_oculto.mp4
-          echo "Video criado com sucesso!"
+          echo "Video principal criado com sucesso!"
+
       - name: Testar novo motor de video
         continue-on-error: true
         run: |
@@ -135,7 +173,7 @@ jobs:
             echo "Video experimental criado!"
           else
             rm -f universo_oculto_novo.mp4
-            echo "Teste experimental falhou. Video principal preservado."
+            echo "Motor experimental falhou. Video principal preservado."
           fi
 
       - name: Salvar video experimental
@@ -143,9 +181,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: universo-oculto-video-experimental
-          path: universo_oculto_novo.mp4
+          path: |
+            universo_oculto_novo.mp4
+            creditos_cenas.txt
           if-no-files-found: ignore
+
       - name: Salvar arquivos produzidos
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: universo-oculto-video-completo
@@ -154,3 +196,4 @@ jobs:
             narracao.txt
             narracao.wav
             universo_oculto.mp4
+          if-no-files-found: error
