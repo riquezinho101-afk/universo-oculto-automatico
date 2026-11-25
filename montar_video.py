@@ -1,4 +1,3 @@
-
 import os
 import re
 import math
@@ -8,57 +7,40 @@ from PIL import Image, ImageOps, ImageEnhance, ImageDraw, ImageFont
 
 W, H, FPS = 1920, 1080, 30
 PASTA = "cenas"
-HEADERS = {
-    "User-Agent": "UniversoOculto/3.0 (video production)"
-}
+HEADERS = {"User-Agent": "UniversoOculto/3.1"}
 
 BUSCAS = {
-    "ABERTURA": [
-        "Earth Blue Marble NASA",
-        "Earth from space",
-        "planet Earth"
-    ],
+    "ABERTURA": ["Earth Blue Marble NASA", "Earth from space"],
     "PLANETA QUE VIBRA": [
-        "seismograph",
-        "seismometer",
-        "seismic waves",
-        "ocean waves",
-        "earthquake seismogram"
+        "seismograph", "seismometer", "seismic waves",
+        "ocean waves", "earthquake seismogram"
     ],
     "DIA QUE ESTÁ FICANDO": [
         "Earth Moon from space NASA",
-        "Moon tidal forces Earth",
-        "Earth rotation"
+        "Moon tidal forces Earth", "Earth rotation"
     ],
     "DESERTO QUE NÃO É": [
         "McMurdo Dry Valleys Antarctica",
-        "Antarctica polar desert",
-        "Antarctic desert landscape"
+        "Antarctica polar desert", "Antarctic landscape"
     ],
     "TERRA JÁ FOI ROXA": [
-        "purple bacteria",
-        "purple microorganisms",
-        "halobacteria"
+        "purple bacteria", "purple microorganisms", "halobacteria"
     ],
     "GRAVIDADE NÃO É": [
         "Hudson Bay Canada satellite",
-        "Earth gravity anomaly map",
-        "Earth geoid gravity"
+        "Earth gravity anomaly map", "Earth geoid gravity"
     ],
     "NÚCLEO É TÃO QUENTE": [
         "Earth inner core cross section",
-        "Earth layers diagram",
-        "Earth core illustration"
+        "Earth layers diagram", "Earth core illustration"
     ],
     "OCEANO OCULTO": [
-        "ringwoodite mineral",
-        "Earth mantle ringwoodite",
+        "ringwoodite mineral", "Earth mantle ringwoodite",
         "water in Earth's mantle"
     ],
     "ENCERRAMENTO": [
         "Earth at night from space NASA",
-        "Earth planet from space",
-        "Blue Marble Earth"
+        "Earth planet from space", "Blue Marble Earth"
     ]
 }
 
@@ -131,7 +113,7 @@ def buscas_do_titulo(titulo):
     return ["Earth planet from space", "Earth landscape"]
 
 
-def buscar_imagens(termo, quantidade=8):
+def buscar_imagens(termo):
     url = "https://commons.wikimedia.org/w/api.php"
 
     parametros = {
@@ -139,7 +121,7 @@ def buscar_imagens(termo, quantidade=8):
         "generator": "search",
         "gsrsearch": "filetype:bitmap " + termo,
         "gsrnamespace": 6,
-        "gsrlimit": quantidade,
+        "gsrlimit": 8,
         "prop": "imageinfo",
         "iiprop": "url",
         "iiurlwidth": 1920,
@@ -147,10 +129,8 @@ def buscar_imagens(termo, quantidade=8):
     }
 
     resposta = requests.get(
-        url,
-        params=parametros,
-        headers=HEADERS,
-        timeout=45
+        url, params=parametros,
+        headers=HEADERS, timeout=45
     )
     resposta.raise_for_status()
 
@@ -169,9 +149,7 @@ def buscar_imagens(termo, quantidade=8):
 
 def baixar_arquivo(link, caminho):
     resposta = requests.get(
-        link,
-        headers=HEADERS,
-        timeout=60
+        link, headers=HEADERS, timeout=60
     )
     resposta.raise_for_status()
 
@@ -194,33 +172,20 @@ def criar_fallback(titulo, destino, variacao):
         tom = int(12 + 22 * y / H)
         draw.line((0, y, W, y), fill=(5, tom, tom + 28))
 
-    centro_x = 1450
-    centro_y = 430
+    cx, cy = 1450, 430
     raio = 230 + variacao * 25
 
     draw.ellipse(
-        (
-            centro_x - raio,
-            centro_y - raio,
-            centro_x + raio,
-            centro_y + raio
-        ),
+        (cx-raio, cy-raio, cx+raio, cy+raio),
         fill=(20, 80, 135),
         outline=(100, 190, 230),
         width=8
     )
 
     draw.arc(
-        (
-            centro_x - raio + 35,
-            centro_y - raio + 35,
-            centro_x + raio - 35,
-            centro_y + raio - 35
-        ),
-        20,
-        300,
-        fill=(80, 180, 130),
-        width=18
+        (cx-raio+35, cy-raio+35,
+         cx+raio-35, cy+raio-35),
+        20, 300, fill=(80, 180, 130), width=18
     )
 
     try:
@@ -228,47 +193,37 @@ def criar_fallback(titulo, destino, variacao):
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             62
         )
-        fonte_menor = ImageFont.truetype(
+        menor = ImageFont.truetype(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             30
         )
     except Exception:
         fonte = ImageFont.load_default()
-        fonte_menor = fonte
-
-    titulo = limpar(titulo).upper()[:55]
+        menor = fonte
 
     draw.text(
-        (100, 390),
-        titulo,
-        font=fonte,
-        fill=(255, 255, 255)
+        (100, 390), limpar(titulo).upper()[:55],
+        font=fonte, fill=(255, 255, 255)
     )
 
     draw.text(
-        (105, 490),
-        "UNIVERSO OCULTO",
-        font=fonte_menor,
-        fill=(120, 205, 235)
+        (105, 490), "UNIVERSO OCULTO",
+        font=menor, fill=(120, 205, 235)
     )
 
     if variacao == 0:
         for x in range(100, 1100, 45):
             altura = 25 + abs(math.sin(x / 45)) * 100
             draw.line(
-                (x, 750, x, 750 - altura),
-                fill=(80, 190, 220),
-                width=5
+                (x, 750, x, 750-altura),
+                fill=(80, 190, 220), width=5
             )
     else:
         for i in range(8):
             y = 700 + i * 30
             draw.arc(
-                (100 + i * 20, y - 100, 900, y + 150),
-                0,
-                180,
-                fill=(80, 160, 210),
-                width=4
+                (100+i*20, y-100, 900, y+150),
+                0, 180, fill=(80, 160, 210), width=4
             )
 
     img.save(destino, quality=94)
@@ -296,7 +251,6 @@ def baixar_duas_imagens(termos, numero, titulo):
                     baixar_arquivo(link, caminho)
                     nomes.add(nome)
                     encontradas.append(caminho)
-
                     print("Imagem encontrada:", nome)
 
                     if len(encontradas) == 2:
@@ -312,13 +266,7 @@ def baixar_duas_imagens(termos, numero, titulo):
         destino = (
             f"{PASTA}/fallback_{numero}_{len(encontradas)}.jpg"
         )
-
-        criar_fallback(
-            titulo,
-            destino,
-            len(encontradas)
-        )
-
+        criar_fallback(titulo, destino, len(encontradas))
         encontradas.append(destino)
 
     return encontradas
@@ -329,8 +277,7 @@ def preparar_imagem(origem, destino, titulo):
         img = img.convert("RGB")
 
         img = ImageOps.fit(
-            img,
-            (W, H),
+            img, (W, H),
             method=Image.Resampling.LANCZOS
         )
 
@@ -352,18 +299,15 @@ def preparar_imagem(origem, destino, titulo):
         except Exception:
             fonte = ImageFont.load_default()
 
-        titulo = limpar(titulo).upper()[:65]
-
         desenho.text(
             (75, 900),
-            titulo,
+            limpar(titulo).upper()[:65],
             font=fonte,
             fill=(255, 255, 255, 255)
         )
 
         img = Image.alpha_composite(
-            img.convert("RGBA"),
-            camada
+            img.convert("RGBA"), camada
         )
 
         img.convert("RGB").save(destino, quality=95)
@@ -373,36 +317,67 @@ def criar_clipe(imagem, destino, duracao, movimento):
     quadros = max(1, int(duracao * FPS))
 
     if movimento == 0:
-        zoom = "min(zoom+0.0007,1.18)"
         x = "iw/2-(iw/zoom/2)"
         y = "ih/2-(ih/zoom/2)"
     else:
-        zoom = "min(zoom+0.0007,1.18)"
         x = "iw/2-(iw/zoom/2)+sin(on/45)*35"
         y = "ih/2-(ih/zoom/2)+cos(on/55)*20"
 
     filtro = (
-        f"zoompan=z='{zoom}':"
-        f"x='{x}':"
-        f"y='{y}':"
+        "scale=2200:-2,"
+        "zoompan="
+        "z='min(zoom+0.0007,1.18)':"
+        f"x='{x}':y='{y}':"
         f"d={quadros}:"
         f"s={W}x{H}:"
         f"fps={FPS},"
-        "format=yuv420p"
+        "setsar=1,format=yuv420p"
     )
 
     executar([
         "ffmpeg", "-y",
-        "-loop", "1",
+        "-loop", "1", "-framerate", str(FPS),
         "-i", imagem,
         "-vf", filtro,
         "-frames:v", str(quadros),
         "-an",
         "-c:v", "libx264",
         "-preset", "ultrafast",
+        "-tune", "stillimage",
+        "-profile:v", "high",
+        "-level", "4.1",
         "-pix_fmt", "yuv420p",
+        "-r", str(FPS),
+        "-g", "60",
+        "-bf", "0",
+        "-f", "mpegts",
         destino
     ])
+
+
+def verificar_video(caminho):
+    print("\nVerificando integridade do vídeo...")
+
+    executar([
+        "ffmpeg",
+        "-v", "error",
+        "-i", caminho,
+        "-map", "0:v:0",
+        "-f", "null",
+        "-"
+    ])
+
+    duracao = float(subprocess.check_output([
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        caminho
+    ]).decode().strip())
+
+    if duracao <= 0:
+        raise RuntimeError("Duração inválida no vídeo final.")
+
+    print(f"Verificação concluída. Duração: {duracao:.2f} segundos.")
 
 
 def criar_video():
@@ -416,12 +391,10 @@ def criar_video():
         roteiro = f.read()
 
     partes = extrair_partes(roteiro)
-
     print("Seções identificadas:", len(partes))
 
     duracao_audio = float(subprocess.check_output([
-        "ffprobe",
-        "-v", "error",
+        "ffprobe", "-v", "error",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         "narracao.wav"
@@ -429,70 +402,70 @@ def criar_video():
 
     pesos = [len(texto) for _, texto in partes]
     total = sum(pesos)
-
     lista = []
 
     for i, (titulo, texto) in enumerate(partes):
-        print(f"\nPreparando seção {i + 1}: {titulo}")
+        print(f"\nPreparando seção {i+1}: {titulo}")
 
         duracao_secao = duracao_audio * pesos[i] / total
         duracao_clipe = duracao_secao / 2
 
-        termos = buscas_do_titulo(titulo)
-
         originais = baixar_duas_imagens(
-            termos,
-            i,
-            titulo
+            buscas_do_titulo(titulo), i, titulo
         )
 
         for j, original in enumerate(originais):
             imagem = f"{PASTA}/final_{i}_{j}.jpg"
-            video = f"{PASTA}/clipe_{i}_{j}.mp4"
+            video = f"{PASTA}/clipe_{i}_{j}.ts"
 
-            preparar_imagem(
-                original,
-                imagem,
-                titulo
-            )
-
-            criar_clipe(
-                imagem,
-                video,
-                duracao_clipe,
-                j
-            )
+            preparar_imagem(original, imagem, titulo)
+            criar_clipe(imagem, video, duracao_clipe, j)
 
             lista.append(video)
 
     with open("lista_cenas.txt", "w", encoding="utf-8") as f:
         for video in lista:
-            f.write(f"file '{video}'\n")
+            f.write(f"file '{os.path.abspath(video)}'\n")
 
-    print("\nMontando vídeo e narração...")
+    print("\nUnindo cenas em MPEG-TS...")
 
     executar([
         "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
         "-i", "lista_cenas.txt",
+        "-c", "copy",
+        "-f", "mpegts",
+        "video_unido.ts"
+    ])
+
+    print("\nAdicionando narração...")
+
+    executar([
+        "ffmpeg", "-y",
+        "-fflags", "+genpts",
+        "-i", "video_unido.ts",
         "-i", "narracao.wav",
         "-map", "0:v:0",
         "-map", "1:a:0",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
+        "-c:v", "copy",
         "-c:a", "aac",
         "-b:a", "192k",
+        "-af", "aresample=async=1:first_pts=0",
         "-shortest",
+        "-avoid_negative_ts", "make_zero",
         "-movflags", "+faststart",
         "universo_oculto.mp4"
     ])
 
     if not os.path.exists("universo_oculto.mp4"):
-        raise RuntimeError("O vídeo não foi criado.")
+        raise RuntimeError("O vídeo final não foi criado.")
 
-    print("\nVÍDEO CRIADO COM SUCESSO!")
+    verificar_video("universo_oculto.mp4")
+
+    print("\nVÍDEO CRIADO E VERIFICADO COM SUCESSO!")
 
 
 if __name__ == "__main__":
     criar_video()
+    
