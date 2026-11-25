@@ -128,7 +128,23 @@ jobs:
           python montar_video.py
           test -s universo_oculto.mp4
           echo "Video criado com sucesso!"
+      - name: Testar novo motor de video
+        continue-on-error: true
+        run: |
+          if python montar_video_novo.py && test -s universo_oculto_novo.mp4; then
+            echo "Video experimental criado!"
+          else
+            rm -f universo_oculto_novo.mp4
+            echo "Teste experimental falhou. Video principal preservado."
+          fi
 
+      - name: Salvar video experimental
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: universo-oculto-video-experimental
+          path: universo_oculto_novo.mp4
+          if-no-files-found: ignore
       - name: Salvar arquivos produzidos
         uses: actions/upload-artifact@v4
         with:
